@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="CLionExternalBuildManager">
+    <target id="825bc8ca-3888-4a22-bbe3-afe75f4c05a9" name="Xasm x86_64" defaultType="MAKE">
+      <configuration id="f6fbfe0c-5297-4fb8-a5d2-a82ed28f7a8e" name="Xasm x86_64" toolchainName="x86_64-unknown-cosmo">
+        <build type="MAKE">
+          <make targetName="build" />
+        </build>
+        <clean type="MAKE">
+          <make targetName="clean" />
+        </clean>
+      </configuration>
+    </target>
+  </component>
+</project>
