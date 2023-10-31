@@ -5,7 +5,7 @@ endif
 COSMOCC=$(COSMO)/bin/cosmocc
 
 .PHONY: build
-build: xasm.com
+build: xasm.com operationlist.com
 
 %.com: %.c
 	$(COSMOCC) -o $@ $^
