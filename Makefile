@@ -11,4 +11,4 @@ build: xasm.com
 	$(COSMOCC) -o $@ $^
 
 clean:
-	rm -f xasm.com*
+	rm -f *.com*
