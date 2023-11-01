@@ -75,11 +75,11 @@ const c8 *op_format_strings[] = {
   "Load immediate, R[%" PRIX8 "] <- 00%" PRIX8 "%" PRIX8,
   "Load, R[%" PRIX8 "] <- M[%" PRIX8 "%" PRIX8 "]",
   "Store, M[%" PRIX8 "%" PRIX8 "] <- R[%" PRIX8 "]",
-  "Load indirect",
-  "Store indirect",
+  "Load indirect, R[%" PRIX8 "] <- M[R[%" PRIX8 "]]",
+  "Store indirect, M[R[%" PRIX8 "]] <- R[%" PRIX8 "]",
   "Branch if zero, if (R[%" PRIX8 "] == 0) goto %" PRIX8 "%" PRIX8,
   "Branch if positive, if (R[%" PRIX8 "] > 0) goto %" PRIX8 "%" PRIX8,
-  "Jump",
+  "Jump, goto R[%" PRIX8 "]",
   "Call function, R[%" PRIX8 "] <- PC; goto %" PRIX8 "%" PRIX8,
 };
 
@@ -117,17 +117,18 @@ c8 *getopdesc(op_info *info) {
 
   if (info->unknown) {
     snprintf(opdesc, opdesclen, UNKNOWN);
-  } else if (op_code_format_mapping[info->op] == format_RRR ||
+  } else if (info->op == op_halt || info->op == op_jump || op_code_format_mapping[info->op] == format_RRR ||
              (op_code_format_mapping[info->op] == format_RAA && info->op != op_store)) {
     snprintf(opdesc, opdesclen, op_format_strings[info->op & 0xF], info->dstOperand, info->src1Operand,
              info->src2Operand);
   } else if (info->op == op_store) {
     snprintf(opdesc, opdesclen, op_format_strings[info->op & 0xF], info->src1Operand, info->src2Operand,
              info->dstOperand);
-  } else {
-    snprintf(opdesc, opdesclen, op_format_strings[info->op & 0xF]);
+  } else if (info->op == op_loadindr) {
+    snprintf(opdesc, opdesclen, op_format_strings[info->op & 0xF], info->dstOperand, info->src2Operand);
+  } else if (info->op == op_storeindr) {
+    snprintf(opdesc, opdesclen, op_format_strings[info->op & 0xF], info->src2Operand, info->dstOperand);
   }
-
   return opdesc;
 }
 
