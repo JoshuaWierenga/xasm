@@ -66,21 +66,21 @@ const op_code_format op_code_format_mapping[] = {
 
 const c8 *op_format_strings[] = {
   "Halt",
-  "Addition, [%" PRIX8 "] <- [%" PRIX8 "] + [%" PRIX8 "]",
-    "Subtraction, [%" PRIX8 "] <- [%" PRIX8 "] - [%" PRIX8 "]",
-    "Bitwise and, [%" PRIX8 "] <- [%" PRIX8 "] & [%" PRIX8 "]",
-    "Bitwise xor, [%" PRIX8 "] <- [%" PRIX8 "] ^ [%" PRIX8 "]",
-    "Shift left, [%" PRIX8 "] <- [%" PRIX8 "] << [%" PRIX8 "]",
-    "Shift right, [%" PRIX8 "] <- [%" PRIX8 "] >> [%" PRIX8 "]",
-  "Load immediate",
-  "Load",
-  "Store",
+  "Addition, R[%" PRIX8 "] <- R[%" PRIX8 "] + R[%" PRIX8 "]",
+    "Subtraction, R[%" PRIX8 "] <- R[%" PRIX8 "] - R[%" PRIX8 "]",
+    "Bitwise and, R[%" PRIX8 "] <- R[%" PRIX8 "] & R[%" PRIX8 "]",
+    "Bitwise xor, R[%" PRIX8 "] <- R[%" PRIX8 "] ^ R[%" PRIX8 "]",
+    "Shift left, R[%" PRIX8 "] <- R[%" PRIX8 "] << R[%" PRIX8 "]",
+    "Shift right, R[%" PRIX8 "] <- R[%" PRIX8 "] >> R[%" PRIX8 "]",
+    "Load immediate, R[%" PRIX8 "] <- 00%" PRIX8 "%" PRIX8,
+    "Load, R[%" PRIX8 "] <- M[%" PRIX8 "%" PRIX8 "]",
+    "Store, M[%" PRIX8 "%" PRIX8 "] <- R[%" PRIX8 "]",
   "Load indirect",
   "Store indirect",
-  "Branch if zero",
-  "Branch if positive",
+    "Branch if zero, if (R[%" PRIX8 "] == 0) goto %" PRIX8 "%" PRIX8,
+    "Branch if positive, if (R[%" PRIX8 "] > 0) goto %" PRIX8 "%" PRIX8,
   "Jump",
-  "Call function"
+    "Call function, R[%" PRIX8 "] <- PC; goto %" PRIX8 "%" PRIX8
 };
 
 #define UNKNOWN "Unknown"
@@ -102,10 +102,12 @@ op_info *getopinfo(u16 word) {
 size getopdesclen(op_info *info) {
   if (info->unknown) {
     return lengthof(UNKNOWN);
-  } else if (op_code_format_mapping[info->op] == format_RRR) {
-    return snprintf(NULL, 0, op_format_strings[info->op & 0xF], info->dstOperand, info->src2Operand, info->src2Operand);
+  } else if (op_code_format_mapping[info->op] == format_RRR
+      || (op_code_format_mapping[info->op] == format_RAA && info->op != op_store)) {
+    return snprintf(NULL, 0, op_format_strings[info->op & 0xF], info->dstOperand, info->src1Operand, info->src2Operand);
+  } else if (info->op == op_store) {
+    return snprintf(NULL, 0, op_format_strings[info->op & 0xF], info->src1Operand, info->src2Operand, info->dstOperand);
   }
-
   return snprintf(NULL, 0, op_format_strings[info->op & 0xF]);
 }
 
@@ -115,13 +117,21 @@ c8 *getopdesc(op_info *info) {
 
   if (info->unknown) {
     snprintf(opdesc, opdesclen, UNKNOWN);
-  } else if (op_code_format_mapping[info->op] == format_RRR) {
+  } else if (op_code_format_mapping[info->op] == format_RRR
+      || (op_code_format_mapping[info->op] == format_RAA && info->op != op_store)) {
     snprintf(opdesc,
              opdesclen,
              op_format_strings[info->op & 0xF],
              info->dstOperand,
-             info->src2Operand,
+             info->src1Operand,
              info->src2Operand);
+  } else if (info->op == op_store) {
+    snprintf(opdesc,
+             opdesclen,
+             op_format_strings[info->op & 0xF],
+             info->src1Operand,
+             info->src2Operand,
+             info->dstOperand);
   } else {
     snprintf(opdesc, opdesclen, op_format_strings[info->op & 0xF]);
   }
