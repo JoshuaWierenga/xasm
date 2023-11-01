@@ -1,0 +1,15 @@
+---
+BasedOnStyle: Google
+StatementMacros:
+  - INITIALIZER
+AlignConsecutiveMacros: true
+AlignConsecutiveDeclarations: false
+AlwaysBreakBeforeMultilineStrings: false
+AllowShortFunctionsOnASingleLine: false
+KeepEmptyLinesAtTheStartOfBlocks: true
+ContinuationIndentWidth: 2
+ConstructorInitializerAllOnOneLineOrOnePerLine: true
+ColumnLimit: 120
+IncludeBlocks: Merge
+SpacesBeforeTrailingComments: 1
+...
