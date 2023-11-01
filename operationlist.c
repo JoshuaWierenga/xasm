@@ -27,20 +27,51 @@ typedef enum {
   op_call = 0xF  // jump and link   R[d] <- PC; PC <- addr
 } op_code;
 
+typedef enum {
+  format____, // Halt(0)
+  format_R__, // Jump(E)
+  format_R_R, // Load indirect and Store indirect(A, B)
+  format_RRR, // Addition through Shift right(1-6)
+  format_RAA // Load immediate through Store, Branch Zero, Branch Positive and Call(7-9, C, D, F)
+} op_code_format;
+
 typedef struct {
   b32 unknown;
   // Only used if !unknown
   op_code op;
+  // This is just the raw nibbles, with format_RAA the two src nibbles are actually one complete byte
+  byte dstOperand;
+  byte src1Operand;
+  byte src2Operand;
 } op_info;
 
-const c8 *op_full_names[] = {
+const op_code_format op_code_format_mapping[] = {
+    format____, // op_halt
+    format_RRR, // op_addition
+    format_RRR, // op_subtract
+    format_RRR, // op_bitwiseand
+    format_RRR, // op_bitwisexor
+    format_RRR, // op_shiftleft
+    format_RRR, // op_shiftright
+    format_RAA, // op_loadimm
+    format_RAA, // op_load
+    format_RAA, // op_store
+    format_R_R, // op_loadindr
+    format_R_R, // op_storeindr
+    format_RAA, // op_branchzero
+    format_RAA, // op_branchpos
+    format_R__, // op_jump
+    format_RAA // op_call
+};
+
+const c8 *op_format_strings[] = {
   "Halt",
-  "Addition",
-  "Subtraction",
-  "Bitwise and",
-  "Bitwise xor",
-  "Shift left",
-  "Shift right",
+  "Addition, [%" PRIX8 "] <- [%" PRIX8 "] + [%" PRIX8 "]",
+    "Subtraction, [%" PRIX8 "] <- [%" PRIX8 "] - [%" PRIX8 "]",
+    "Bitwise and, [%" PRIX8 "] <- [%" PRIX8 "] & [%" PRIX8 "]",
+    "Bitwise xor, [%" PRIX8 "] <- [%" PRIX8 "] ^ [%" PRIX8 "]",
+    "Shift left, [%" PRIX8 "] <- [%" PRIX8 "] << [%" PRIX8 "]",
+    "Shift right, [%" PRIX8 "] <- [%" PRIX8 "] >> [%" PRIX8 "]",
   "Load immediate",
   "Load",
   "Store",
@@ -61,16 +92,21 @@ op_info *getopinfo(u16 word) {
     return &info;
   }
 
-  info.op = word >> 12;
+  info.op = (op_code) (word >> 12);
+  info.dstOperand = (word >> 8) & 0xF;
+  info.src1Operand = (word >> 4) & 0xF;
+  info.src2Operand = word & 0xF;
   return &info;
 }
 
 size getopdesclen(op_info *info) {
   if (info->unknown) {
     return lengthof(UNKNOWN);
+  } else if (op_code_format_mapping[info->op] == format_RRR) {
+    return snprintf(NULL, 0, op_format_strings[info->op & 0xF], info->dstOperand, info->src2Operand, info->src2Operand);
   }
 
-  return snprintf(NULL, 0, op_full_names[info->op & 0xF]);
+  return snprintf(NULL, 0, op_format_strings[info->op & 0xF]);
 }
 
 c8 *getopdesc(op_info *info) {
@@ -79,8 +115,15 @@ c8 *getopdesc(op_info *info) {
 
   if (info->unknown) {
     snprintf(opdesc, opdesclen, UNKNOWN);
+  } else if (op_code_format_mapping[info->op] == format_RRR) {
+    snprintf(opdesc,
+             opdesclen,
+             op_format_strings[info->op & 0xF],
+             info->dstOperand,
+             info->src2Operand,
+             info->src2Operand);
   } else {
-    snprintf(opdesc, opdesclen, op_full_names[info->op & 0xF]);
+    snprintf(opdesc, opdesclen, op_format_strings[info->op & 0xF]);
   }
 
   return opdesc;
