@@ -1,11 +1,10 @@
 grammar asmxtoy;
 
-file: line* EOF;
+file: (line? EOL)* line? EOF;
 
 line
     : WS
-    | EOL
-    | WS? operation WS? EOL?
+    | WS? operation WS?
     ;
 
 operation
