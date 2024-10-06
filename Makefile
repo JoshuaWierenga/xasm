@@ -23,7 +23,7 @@ $(ASMXTOYBUILDDIR)/%.cpp.o: $(ASMXTOYSRCDIR)/%.cpp $(ANTLRSRCDIR)/extracted | $(
 	$(CXX) -o $@ -c $< -I $(ANTLRSRCDIR)/runtime/src
 
 
-build: xasm
+build: xasm emulator
 
 clean:
 	rm -r $(BUILDDIR) 2> /dev/null || true
@@ -58,3 +58,10 @@ $(ASMXTOYBUILDDIR)/libasmxtoy.a: $(ASMXTOYBUILDDIR)/asmxtoyLexer.cpp.o $(ASMXTOY
 
 xasm: $(ASMXTOYBUILDDIR)/main.cpp.o $(ASMXTOYBUILDDIR)/libasmxtoy.a $(ANTLRBUILDDIR)/runtime/libantlr4-runtime.a
 	$(CXX) -o $@ $^
+
+
+$(ASMXTOYBUILDDIR)/emulator.c.o: emulator.c | $(ASMXTOYBUILDDIR)
+	$(CC) -o $@ -c $<
+
+emulator: $(ASMXTOYBUILDDIR)/emulator.c.o
+	$(CC) -o $@ $^

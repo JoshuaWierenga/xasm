@@ -1,22 +1,23 @@
-#include <cosmo.h>
-#include <errno.h>
-#include <stdbool.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
+#include <ctype.h>    // isspace
+#include <errno.h>    // error, ERANGE
+#include <inttypes.h> // PRIX8, PRIX16, PRIX32, SCNx32, UINT8_MAX, uint8_t, UINT16_MAX, uint16_t, uint32_t
+#include <stdbool.h>  // bool, false, true
+#include <stdio.h>    // FILE, feof, ferror, fopen, getchar, printf, puts, stderr
+#include <stdlib.h>   // exit, free, malloc, realloc, strtoul
+#include <string.h>   // strcmp, strlen, strncmp
 
-#define REG_COUNT 16
-#define MEM_SIZE_16 UINT8_MAX + 1
-#define MEM_SIZE_32 UINT16_MAX + 1
+#define REG_COUNT   (uint8_t)16
+#define MEM_SIZE_16 (uint32_t)(UINT8_MAX + 1)
+#define MEM_SIZE_32 (uint32_t)(UINT16_MAX + 1)
 
 static bool step = false;
 static bool debug = true;
 
 static uint8_t  windowSize = 6;
-static uint16_t memMaxValue = UINT8_MAX;
-static uint32_t memMaxAddress32 = MEM_SIZE_32 - 1;
-static uint32_t memMaxValue32 = UINT32_MAX;
-static uint16_t stdInOutAddr = 0xFF;
+static uint32_t memMaxValue16 = UINT16_MAX;
+// static uint32_t memMaxValue32 = UINT32_MAX;
+static uint16_t stdInOutAddr16 = 0xFF;
+static uint16_t stdInOutAddr32 = 0x7F; // 0xFF/2
 
 typedef struct {
   bool     halted;
@@ -27,22 +28,36 @@ typedef struct {
   
   bool     readReg1, readReg2, wroteReg;
   uint8_t  lastReadReg1, lastReadReg2, lastWriteReg;
-  int32_t  registers[REG_COUNT];
+  uint32_t registers[REG_COUNT];
   
   bool     readMem, wroteMem;
   uint16_t lastReadAddr, lastWriteAddr;
   union {
-   int16_t memory16[MEM_SIZE_16];
-   int32_t memory[MEM_SIZE_32];
+    uint16_t memory16[MEM_SIZE_16];
+    uint32_t memory32[MEM_SIZE_32];
   };
 } cpu;
 
 // TODO: Test with memory32
 void handleStdin(cpu *cpuState, uint16_t nextReadAddr) {
-  if (nextReadAddr != stdInOutAddr) return;
-  
+  char *fmt;
+  void *addr;
+  if (cpuState->in32Bit) {
+    if (nextReadAddr != stdInOutAddr32) {
+      return;
+    }
+    fmt = "%8" SCNx32;
+    addr = cpuState->memory32 + stdInOutAddr32;
+  } else {
+    if (nextReadAddr != stdInOutAddr16) {
+      return;
+    }
+    fmt = "%4" SCNx32;
+    addr = cpuState->memory16 + stdInOutAddr16;
+  }
+
   printf("input: \n");
-  while (scanf("%4" SCNx16, cpuState->memory + stdInOutAddr) != 1) {
+  while (scanf(fmt, addr) != 1) {
     printf("input: \n");
     scanf("%*s");
   }
@@ -52,9 +67,27 @@ void handleStdin(cpu *cpuState, uint16_t nextReadAddr) {
 
 // TODO: Test with memory32
 void handleStdout(cpu *cpuState, uint16_t lastWriteAddr) {
-  if (lastWriteAddr != stdInOutAddr) return;
-  uint32_t mem = cpuState->memory32[stdInOutAddr];
-  printf("output: %04" PRIX16 "(%" PRId16 ")\n\n", mem, mem);
+  // TODO: Fix mem mess, requires flipping 16 bit bytes based on host endianness(big = nothing, small = flip)
+  // This is different from common endian functions which use native byte sizes(normally 8 bits)
+  char *fmt;
+  uint32_t mem;
+  if (cpuState->in32Bit) {
+    if (lastWriteAddr != stdInOutAddr32) {
+      return;
+    }
+    fmt = "%08" PRIX32;
+    mem = cpuState->memory32[stdInOutAddr32];
+  } else {
+    if (lastWriteAddr != stdInOutAddr16) {
+      return;
+    }
+    fmt = "%04" PRIX32;
+    mem = cpuState->memory16[stdInOutAddr16];
+  }
+
+  printf("output: ");
+  printf(fmt, mem);
+  printf("(%" PRId16 ")\n\n", mem);
 }
 
 
@@ -68,7 +101,7 @@ void writePC(cpu *cpuState, uint16_t newPC, bool cycleIncrement) {
   cpuState->pcModified |= !cycleIncrement;
 }
 
-int32_t readRegister(cpu *cpuState, uint8_t reg, bool secondRead) {
+uint32_t readRegister(cpu *cpuState, uint8_t reg, bool secondRead) {
   if (reg >= REG_COUNT) {
     fprintf(stderr, "Error: Invalid cpu register accessed");
     exit(1);
@@ -85,7 +118,7 @@ int32_t readRegister(cpu *cpuState, uint8_t reg, bool secondRead) {
   return cpuState->registers[reg];
 }
 
-void writeRegister(cpu *cpuState, uint8_t reg, int32_t value) {
+void writeRegister(cpu *cpuState, uint8_t reg, uint32_t value) {
   if (reg >= REG_COUNT) {
     fprintf(stderr, "Error: Invalid cpu register accessed");
     exit(1);
@@ -98,19 +131,20 @@ void writeRegister(cpu *cpuState, uint8_t reg, int32_t value) {
   cpuState->registers[reg] = value;
 }
 
-int32_t readMemory(cpu *cpuState, uint16_t addr) {
+uint32_t readMemory(cpu *cpuState, uint16_t addr) {
   handleStdin(cpuState, addr);
   cpuState->readMem = true;
   cpuState->lastReadAddr = addr;
   return cpuState->in32Bit ? cpuState->memory32[addr] : cpuState->memory16[addr];
 }
 
-void writeMemory(cpu *cpuState, uint16_t addr, int32_t value) {
-  cpuState->wroteMem = addr != stdInOutAddr;
+void writeMemory(cpu *cpuState, uint16_t addr, uint32_t value) {
   cpuState->lastWriteAddr = addr;
   if (cpuState->in32Bit) {
+    cpuState->wroteMem = addr != stdInOutAddr32;
     cpuState->memory32[addr] = value;
   } else {
+    cpuState->wroteMem = addr != stdInOutAddr16;
     cpuState->memory16[addr] = value;
   }
   handleStdout(cpuState, addr);
@@ -239,12 +273,12 @@ void printCpuState(cpu *cpuState) {
   
   puts("Cpu state:\n  Registers:");
   printf(fLabelStr1, getPCColour(cpuState), whiteStr);
-  for (uint16_t i = 0; i < REG_COUNT; ++i) {
+  for (uint8_t i = 0; i < REG_COUNT; ++i) {
     printf(fLabelStr2, getRegColour(cpuState, i), i, whiteStr);
   }
 
   printf(fValueStr1, getPCColour(cpuState), cpuState->pc, whiteStr);
-  for (uint16_t i = 0; i < REG_COUNT; ++i) {
+  for (uint8_t i = 0; i < REG_COUNT; ++i) {
     printf(fValueStr2, getRegColour(cpuState, i), cpuState->registers[i], whiteStr);
   }
 
@@ -269,13 +303,13 @@ void initCpuState(cpu *cpuState) {
   
   cpuState->readReg1 = cpuState->readReg2 = cpuState->wroteReg = false;
   cpuState->lastReadReg1 = cpuState->lastReadReg2 = cpuState->lastWriteReg = 0;
-  for (int i = 0; i < REG_COUNT; ++i) {
+  for (uint8_t i = 0; i < REG_COUNT; ++i) {
     cpuState->registers[i] = 0;
   }
   
   cpuState->readMem = cpuState->wroteMem = false;
   cpuState->lastReadAddr = cpuState->lastWriteAddr = 0;
-  for (int i = 0; i <= memMaxValue32; ++i) {
+  for (uint32_t i = 0; i < MEM_SIZE_32; ++i) {
     cpuState->memory32[i] = 0;
   }
 }
@@ -335,8 +369,8 @@ void runCpu16(cpu *cpuState) {
         cpuState->halted = !cpuState->in32Bit;
         break;
       case 0x1:
-        int16_t r1 = readRegister(cpuState, (inst >> 4) & 0xF, false);
-        int16_t r2 = readRegister(cpuState, inst & 0xF, true);
+        uint32_t r1 = readRegister(cpuState, (inst >> 4) & 0xF, false);
+        uint32_t r2 = readRegister(cpuState, inst & 0xF, true);
         writeRegister(cpuState, (inst >> 8) & 0xF, r1 + r2);
         break;
       case 0x2:
@@ -368,7 +402,7 @@ void runCpu16(cpu *cpuState) {
         writeRegister(cpuState, (inst >> 8) & 0xF, inst & 0xFF);
         break;
       case 0x8:
-        int16_t mem = readMemory(cpuState, inst & 0xFF);
+        uint32_t mem = readMemory(cpuState, inst & 0xFF);
         writeRegister(cpuState, (inst >> 8) & 0xF, mem);
         break;
       case 0x9:
@@ -415,13 +449,53 @@ void runCpu16(cpu *cpuState) {
 }
 
 
+// From https://github.com/archiecobbs/libnbcompat/blob/4700b02/fgetln.c
+char *fgetln(FILE *fp, size_t *len) {
+  static char *buf = NULL;
+  static size_t bufsiz = 0;
+  static size_t buflen = 0;
+  int c;
+
+  if (buf == NULL) {
+    bufsiz = BUFSIZ;
+    if ((buf = malloc(bufsiz)) == NULL) {
+      return NULL;
+    }
+  }
+
+  buflen = 0;
+  while ((c = fgetc(fp)) != EOF) {
+    if (buflen >= bufsiz) {
+      size_t nbufsiz = bufsiz + BUFSIZ;
+      char *nbuf = realloc(buf, nbufsiz);
+
+      if (nbuf == NULL) {
+        int oerrno = errno;
+        free(buf);
+        errno = oerrno;
+        buf = NULL;
+        return NULL;
+      }
+
+      buf = nbuf;
+      bufsiz = nbufsiz;
+    }
+    buf[buflen++] = c;
+    if (c == '\n') {
+      break;
+    }
+  }
+  *len = buflen;
+  return buflen == 0 ? NULL : buf;
+}
+
 void processLine16(char *line, cpu *cpuState) {
   static bool inComment = false;
   char *rest;
   
   // Trim spaces from beginning and end of line
   while (isspace((unsigned char)*line)) line++;
-  ptrdiff_t len = strlen(line);
+  size_t len = strlen(line);
   while(len && isspace((unsigned char)line[len - 1])) --len;
   line[len] = 0;
   
@@ -451,41 +525,39 @@ void processLine16(char *line, cpu *cpuState) {
     return;
   }
 
-  unsigned long address = strtoul(line, &rest, 16);
-  if (errno == ERANGE || address > memMaxAddress32 || (line + 2) > rest) {
+  uint32_t address = strtoul(line, &rest, 16);
+  if (errno == ERANGE || address >= MEM_SIZE_32 || (line + 2) > rest) {
     puts("\nInvalid memory address");
     exit(1);
   }
 
-  if (address)
-
   line = rest + 1;
-  unsigned long data = strtoul(line, &rest, 16);
-  if (errno == ERANGE || (addressdata > memMaxValue32 || (line + 4) > rest) {
+  uint32_t data = strtoul(line, &rest, 16);
+  if (errno == ERANGE || (data > memMaxValue16 || (line + 4) > rest)) {
     puts("\nInvalid memory value");
     exit(1);
   }
 
-  printf(", %02lX -> %08X\n", address, data);
-  cpuState->memory[address] = data;
+  printf(", %02lX -> %04X\n", address, data);
+  cpuState->memory16[address] = data;
 }
 
-void processFile16(char *filePath) {
+void processFile16(cpu *cpuState, char *filePath) {
   FILE *fp;
   char *line = NULL;
-  ptrdiff_t lineLen;
-  cpu state;
+  size_t lineLen;
 
   if (!(fp = fopen(filePath, "r"))) {
     puts("Path is invalid");
     exit(1);
   }
 
-  initCpuState16(&state);
+  initCpuState16(cpuState);
 
-  while ((line = chomp(fgetln(fp, NULL)))) {
+  while ((line = fgetln(fp, &lineLen))) {
+    line[lineLen - 1] = '\0';
     printf("input: \"%s\"", line);
-    processLine16(line, &state);
+    processLine16(line, cpuState);
   }
 
 
@@ -495,19 +567,22 @@ void processFile16(char *filePath) {
   }
 
   putchar('\n');
-  printCpuState(&state);
-
-  putchar('\n');
-  runCpu16(&state);
 }
 
 int main(int argc, char **argv) {
+  cpu cpuState;
+
   if (argc != 2) {
     puts("No path given");
     return 1;
   }
 
-  processFile16(argv[1]);
+  processFile16(&cpuState, argv[1]);
+
+  printCpuState(&cpuState);
+  putchar('\n');
+
+  runCpu16(&cpuState);
 
   return 0;
 }
