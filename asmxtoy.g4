@@ -9,11 +9,14 @@ line
 
 operation
     : instruction
+    | directive
     | COMMENT
     ;
 
 instruction: MNEMONIC argument*;
 argument: WS (REGISTER | ADDRESS);
+
+directive: DOT DIRECTIVE_NAME (WS ADDRESS)?;
 
 MNEMONIC
     : 'hlt' // 0XXX
@@ -34,10 +37,14 @@ MNEMONIC
     | 'jsr' // FXXX
     ;
 
+DIRECTIVE_NAME: 'ORG';
+
 DIGIT: [0-9A-F];
 
 REGISTER: 'r' DIGIT;
 ADDRESS: DIGIT DIGIT;
+
+DOT: '.';
 
 COMMENT: ';' ~[\n\r]*;
 

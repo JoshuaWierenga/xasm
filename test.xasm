@@ -1,4 +1,10 @@
 ; This is a test
+lda r1 15
+add r2 r1 r1
+str r2 FF
+hlt
+
+.ORG 30
 hlt
 add r1 r2 r3
 sub r4 r5 r6

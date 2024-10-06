@@ -1,6 +1,7 @@
 #include <array>
 #include <cstdint>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <map>
 #include <optional>
@@ -12,9 +13,6 @@
 
 using namespace antlr4;
 
-
-// TODO: Use or remove
-int_fast8_t MemoryWidth = 16;
 
 enum OperandType {
   End,
@@ -33,14 +31,6 @@ struct Instruction {
 
   uint_fast8_t opcode;
   std::array<OperandType, 3> operandTypes;
-};
-
-// TODO: Use or remove
-std::map<enum OperandType, uint_fast8_t> OperandWidth = {
-  {OperandType::End,      0},
-  {OperandType::Zero,     4},
-  {OperandType::Register, 4},
-  {OperandType::Address,  8}
 };
 
 std::map<std::string, struct Instruction> Instructions{{
@@ -63,9 +53,14 @@ std::map<std::string, struct Instruction> Instructions{{
 }};
 
 
+static uint8_t memoryLocation = 0x10;
+
+
+// TODO: Merge with output?
 class XToyListenerInfo : public asmxtoyBaseListener {
 public:
-  void exitInstruction(asmxtoyParser::InstructionContext *ctx) override;
+  void exitInstruction(asmxtoyParser::InstructionContext *) override;
+  void exitDirective(asmxtoyParser::DirectiveContext *) override;
 };
 
 void XToyListenerInfo::exitInstruction(asmxtoyParser::InstructionContext *instructionCtx) {
@@ -103,7 +98,7 @@ void XToyListenerInfo::exitInstruction(asmxtoyParser::InstructionContext *instru
         break;
       case Register:
         // TODO: Report error
-        if (nullptr == argumentCtx) {
+        if (!argumentCtx) {
           throw std::exception();
         }
 
@@ -119,7 +114,7 @@ void XToyListenerInfo::exitInstruction(asmxtoyParser::InstructionContext *instru
         break;
       case Address:
         // TODO: Report error
-        if (nullptr == argumentCtx) {
+        if (!argumentCtx) {
           throw std::exception();
         }
 
@@ -141,18 +136,48 @@ void XToyListenerInfo::exitInstruction(asmxtoyParser::InstructionContext *instru
       ++argumentIdx;
     }
   }
+
+  ++memoryLocation;
+}
+
+void XToyListenerInfo::exitDirective(asmxtoyParser::DirectiveContext *directiveCtx) {
+  // TODO: Use addressNode->toString() instead of addressNode->getSymbol()->getText()?
+  tree::TerminalNode *addressNode = directiveCtx->ADDRESS();
+  if (!addressNode) {
+    std::cerr << "ORG directive missing memory address" << std::endl;
+    throw std::exception();
+  }
+
+  Token *addressToken = addressNode->getSymbol();
+  std::string address = addressToken->getText();
+
+  std::cout << "Found direction ORG with address " << address << std::endl;
+
+  uint_fast8_t newMemoryLocation = std::stoi(addressToken->getText(), nullptr, 16);
+  if (newMemoryLocation <= memoryLocation) {
+    std::cerr << "ORG direction will smaller memory address not allowed, current address is "
+      << std::setfill('0') << std::setw(2) << std::uppercase << std::hex << +memoryLocation <<
+      ", requested address is " << address << std::endl;
+    std::cerr << addressToken->toString() << std::endl;
+    throw std::exception();
+  }
+  memoryLocation = newMemoryLocation;
 }
 
 
 class XToyListenerOutput : public asmxtoyBaseListener {
 public:
-  void exitInstruction(asmxtoyParser::InstructionContext *ctx) override;
+  void exitInstruction(asmxtoyParser::InstructionContext *) override;
+  void exitDirective(asmxtoyParser::DirectiveContext *) override;
 };
 
 void XToyListenerOutput::exitInstruction(asmxtoyParser::InstructionContext *instructionCtx) {
   tree::TerminalNode *mnemonicNode = instructionCtx->MNEMONIC();
   Token *mnemonicToken = mnemonicNode->getSymbol();
   std::string mnemonic = mnemonicToken->getText();
+
+  std::cout << std::setfill('0') << std::setw(2) << std::uppercase << std::hex << +memoryLocation << ": ";
+  ++memoryLocation;
 
   struct Instruction instruction = Instructions.find(mnemonic)->second;
   std::cout << std::uppercase << std::hex << +instruction.opcode;
@@ -189,6 +214,14 @@ void XToyListenerOutput::exitInstruction(asmxtoyParser::InstructionContext *inst
   std::cout << std::endl;
 }
 
+void XToyListenerOutput::exitDirective(asmxtoyParser::DirectiveContext *directiveCtx) {
+  // TODO: Use addressNode->toString() instead of addressNode->getSymbol()->getText()?
+  tree::TerminalNode *addressNode = directiveCtx->ADDRESS();
+  Token *addressToken = addressNode->getSymbol();
+
+  memoryLocation = std::stoi(addressToken->getText(), nullptr, 16);
+}
+
 
 int main(void) {
   std::ifstream code("test.xasm");
@@ -205,6 +238,8 @@ int main(void) {
   } catch (const std::exception &) {
     return EXIT_FAILURE;
   }
+
+  memoryLocation = 0x10;
 
   std::cout << std::endl << "Output:" << std::endl;
   XToyListenerOutput listenerOutput;
