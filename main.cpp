@@ -135,8 +135,6 @@ void XToyListenerInfo::exitInstruction(asmxtoyParser::InstructionContext *instru
       ++argumentIdx;
     }
   }
-
-  ++memoryLocation;
 }
 
 class XToyListenerOutput : public asmxtoyBaseListener {
@@ -200,7 +198,7 @@ void XToyListenerOutput::exitDirective(asmxtoyParser::DirectiveContext *directiv
 
   // TODO: Allow out of order memory locations?
   // Can do by putting instructions into an array first and then write out in order
-  // Need to also track written values to split unwriten from hlt written explicitly
+  // Need to also track written values to split unwritten from hlt written explicitly
   // Can restore debug message then
   uint_fast8_t newMemoryLocation = std::stoi(address, nullptr, 16);
   if (newMemoryLocation <= memoryLocation) {
@@ -231,8 +229,6 @@ int main(void) {
   } catch (const std::exception &) {
     return EXIT_FAILURE;
   }
-
-  memoryLocation = 0x10;
 
   std::cout << std::endl << "Output:" << std::endl;
   XToyListenerOutput listenerOutput;
