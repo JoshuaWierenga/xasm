@@ -1,0 +1,17 @@
+; This is a test
+hlt
+add r1 r2 r3
+sub r4 r5 r6
+and r7 r8 r9
+xor rA rB rC
+asl rD rE rF
+asr r1 r2 r3
+lda r4 00
+lod r5 01
+str r6 02
+ldi r7 r8
+sti r8 rA
+brz rB 03
+brp rC 04
+jmp rD
+jsr rE 05
