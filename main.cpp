@@ -1,15 +1,3 @@
-/* Copyright (c) 2012-2017 The ANTLR Project. All rights reserved.
- * Use of this file is governed by the BSD 3-clause license that
- * can be found in the LICENSE.txt file in the project root.
- */
-
-//
-//  main.cpp
-//  antlr4-cpp-demo
-//
-//  Created by Mike Lischke on 13.03.16.
-//
-
 #include <array>
 #include <cstdint>
 #include <fstream>
@@ -24,9 +12,8 @@
 
 using namespace antlr4;
 
-using std::ifstream;
 
-
+// TODO: Use or remove
 int_fast8_t MemoryWidth = 16;
 
 enum OperandType {
@@ -35,6 +22,7 @@ enum OperandType {
   Register,
   Address
 };
+
 std::array<OperandType, 3> OperandFormatRRR = {Register, Register, Register};
 std::array<OperandType, 3> OperandFormatR_R = {Register, Zero, Register};
 std::array<OperandType, 3> OperandFormatRA  = {Register, Address,  End};
@@ -73,17 +61,6 @@ std::map<std::string, struct Instruction> Instructions{{
   {"jmp", {1, 0xE, {Register, Zero, Zero}}},
   {"jsr", {2, 0xF, OperandFormatRA}}
 }};
-
-
-/*std::optional<struct Instruction> FindInstruction(std::string mnemonic) {
-  for (struct Instruction &instruction : Instructions) {
-    if (instruction.mnemonic == mnemonic) {
-      return instruction;
-    }
-  }
-
-  return {};
-}*/
 
 
 class XToyListenerInfo : public asmxtoyBaseListener {
@@ -177,9 +154,7 @@ void XToyListenerOutput::exitInstruction(asmxtoyParser::InstructionContext *inst
   Token *mnemonicToken = mnemonicNode->getSymbol();
   std::string mnemonic = mnemonicToken->getText();
 
-  auto instructionIter = Instructions.find(mnemonic);
-  struct Instruction instruction = instructionIter->second;
-
+  struct Instruction instruction = Instructions.find(mnemonic)->second;
   std::cout << std::uppercase << std::hex << +instruction.opcode;
 
   size_t argumentIdx = 0;
@@ -196,7 +171,7 @@ void XToyListenerOutput::exitInstruction(asmxtoyParser::InstructionContext *inst
         tree::TerminalNode *registerNode = argumentCtx->REGISTER();
         Token *registerToken = registerNode->getSymbol();
         std::string registerStr = registerToken->getText();
-        
+
         std::cout << std::uppercase << std::hex << registerStr.back();
         ++argumentIdx;
         break;
@@ -204,7 +179,7 @@ void XToyListenerOutput::exitInstruction(asmxtoyParser::InstructionContext *inst
       case Address:
         tree::TerminalNode *addressNode = argumentCtx->ADDRESS();
         Token *addressToken = addressNode->getSymbol();
-        
+
         std::cout << addressToken->getText();
         ++argumentIdx;
         break;
@@ -216,7 +191,7 @@ void XToyListenerOutput::exitInstruction(asmxtoyParser::InstructionContext *inst
 
 
 int main(void) {
-  ifstream code("test.xasm");
+  std::ifstream code("test.xasm");
   ANTLRInputStream input(code);
   asmxtoyLexer lexer(&input);
   CommonTokenStream tokens(&lexer);
