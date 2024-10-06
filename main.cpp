@@ -60,7 +60,6 @@ static uint8_t memoryLocation = 0x10;
 class XToyListenerInfo : public asmxtoyBaseListener {
 public:
   void exitInstruction(asmxtoyParser::InstructionContext *) override;
-  void exitDirective(asmxtoyParser::DirectiveContext *) override;
 };
 
 void XToyListenerInfo::exitInstruction(asmxtoyParser::InstructionContext *instructionCtx) {
@@ -140,31 +139,6 @@ void XToyListenerInfo::exitInstruction(asmxtoyParser::InstructionContext *instru
   ++memoryLocation;
 }
 
-void XToyListenerInfo::exitDirective(asmxtoyParser::DirectiveContext *directiveCtx) {
-  // TODO: Use addressNode->toString() instead of addressNode->getSymbol()->getText()?
-  tree::TerminalNode *addressNode = directiveCtx->ADDRESS();
-  if (!addressNode) {
-    std::cerr << "ORG directive missing memory address" << std::endl;
-    throw std::exception();
-  }
-
-  Token *addressToken = addressNode->getSymbol();
-  std::string address = addressToken->getText();
-
-  std::cout << "Found direction ORG with address " << address << std::endl;
-
-  uint_fast8_t newMemoryLocation = std::stoi(addressToken->getText(), nullptr, 16);
-  if (newMemoryLocation <= memoryLocation) {
-    std::cerr << "ORG direction will smaller memory address not allowed, current address is "
-      << std::setfill('0') << std::setw(2) << std::uppercase << std::hex << +memoryLocation <<
-      ", requested address is " << address << std::endl;
-    std::cerr << addressToken->toString() << std::endl;
-    throw std::exception();
-  }
-  memoryLocation = newMemoryLocation;
-}
-
-
 class XToyListenerOutput : public asmxtoyBaseListener {
 public:
   void exitInstruction(asmxtoyParser::InstructionContext *) override;
@@ -215,11 +189,30 @@ void XToyListenerOutput::exitInstruction(asmxtoyParser::InstructionContext *inst
 }
 
 void XToyListenerOutput::exitDirective(asmxtoyParser::DirectiveContext *directiveCtx) {
-  // TODO: Use addressNode->toString() instead of addressNode->getSymbol()->getText()?
   tree::TerminalNode *addressNode = directiveCtx->ADDRESS();
-  Token *addressToken = addressNode->getSymbol();
+  if (!addressNode) {
+    std::cerr << "ORG directive missing memory address" << std::endl;
+    throw std::exception();
+  }
 
-  memoryLocation = std::stoi(addressToken->getText(), nullptr, 16);
+  std::string address = addressNode->toString();
+  // std::cout << "Found direction ORG with address " << address << std::endl;
+
+  // TODO: Allow out of order memory locations?
+  // Can do by putting instructions into an array first and then write out in order
+  // Need to also track written values to split unwriten from hlt written explicitly
+  // Can restore debug message then
+  uint_fast8_t newMemoryLocation = std::stoi(address, nullptr, 16);
+  if (newMemoryLocation <= memoryLocation) {
+    Token *addressToken = addressNode->getSymbol();
+    std::cerr << "ORG direction will smaller memory address not allowed, current address is "
+      << std::setfill('0') << std::setw(2) << std::uppercase << std::hex << +memoryLocation <<
+      ", requested address is " << address << std::endl;
+    std::cerr << addressToken->toString() << std::endl;
+    throw std::exception();
+  }
+
+  memoryLocation = newMemoryLocation;
 }
 
 
@@ -243,7 +236,11 @@ int main(void) {
 
   std::cout << std::endl << "Output:" << std::endl;
   XToyListenerOutput listenerOutput;
-  tree::ParseTreeWalker::DEFAULT.walk(&listenerOutput, tree);
+  try {
+    tree::ParseTreeWalker::DEFAULT.walk(&listenerOutput, tree);
+  } catch (const std::exception &) {
+    return EXIT_FAILURE;
+  }
 
   return EXIT_SUCCESS;
 }
