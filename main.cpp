@@ -56,13 +56,13 @@ std::map<std::string, struct Instruction> Instructions{{
 static uint8_t memoryLocation = 0x10;
 
 
-// TODO: Merge with output?
-class XToyListenerInfo : public asmxtoyBaseListener {
+class XToyListener : public asmxtoyBaseListener {
 public:
   void exitInstruction(asmxtoyParser::InstructionContext *) override;
+  void exitDirective(asmxtoyParser::DirectiveContext *) override;
 };
 
-void XToyListenerInfo::exitInstruction(asmxtoyParser::InstructionContext *instructionCtx) {
+void XToyListener::exitInstruction(asmxtoyParser::InstructionContext *instructionCtx) {
   tree::TerminalNode *mnemonicNode = instructionCtx->MNEMONIC();
   Token *mnemonicToken = mnemonicNode->getSymbol();
   std::string mnemonic = mnemonicToken->getText();
@@ -84,18 +84,26 @@ void XToyListenerInfo::exitInstruction(asmxtoyParser::InstructionContext *instru
     throw std::exception();
   }
 
-  std::cout << "Found instruction " << mnemonic << " with " << argumentCount << " registers" << std::endl;
+  // std::cout << "Found instruction " << mnemonic << " with " << argumentCount << " registers" << std::endl;
+
+  std::cout << std::setfill('0') << std::setw(2) << std::uppercase << std::hex << +memoryLocation << ": ";
+  ++memoryLocation;
+
+  std::cout << std::uppercase << std::hex << +instruction.opcode;
 
   size_t argumentIdx = 0;
   for (enum OperandType operandType : instruction.operandTypes) {
     asmxtoyParser::ArgumentContext *const &argumentCtx = instructionCtx->argument(argumentIdx);
-    tree::TerminalNode *argumentNode = nullptr;
+    tree::TerminalNode *argumentNode;
+    Token *argumentToken = nullptr;
 
     switch (operandType) {
       case End:
-      case Zero:
         break;
-      case Register:
+      case Zero:
+        std::cout << "0";
+        break;
+      case Register: {
         // TODO: Report error
         if (!argumentCtx) {
           throw std::exception();
@@ -109,8 +117,14 @@ void XToyListenerInfo::exitInstruction(asmxtoyParser::InstructionContext *instru
           throw std::exception();
         }
 
-        std::cout << "  Register: ";
+        // std::cout << "  Register: ";
+
+        argumentToken = argumentNode->getSymbol();
+        std::string registerStr = argumentToken->getText();
+
+        std::cout << std::uppercase << std::hex << registerStr.back();
         break;
+      }
       case Address:
         // TODO: Report error
         if (!argumentCtx) {
@@ -125,68 +139,24 @@ void XToyListenerInfo::exitInstruction(asmxtoyParser::InstructionContext *instru
           throw std::exception();
         }
 
-        std::cout << "   Address: ";
+        // std::cout << "   Address: ";
+
+        argumentToken = argumentNode->getSymbol();
+
+        std::cout << argumentNode->getText();
         break;
     }
 
-    if (argumentNode) {
-      Token *argumentToken = argumentNode->getSymbol();
-      std::cout << argumentToken->getText() << std::endl;
+    if (argumentToken) {
+      // std::cout << argumentToken->getText() << std::endl;
       ++argumentIdx;
-    }
-  }
-}
-
-class XToyListenerOutput : public asmxtoyBaseListener {
-public:
-  void exitInstruction(asmxtoyParser::InstructionContext *) override;
-  void exitDirective(asmxtoyParser::DirectiveContext *) override;
-};
-
-void XToyListenerOutput::exitInstruction(asmxtoyParser::InstructionContext *instructionCtx) {
-  tree::TerminalNode *mnemonicNode = instructionCtx->MNEMONIC();
-  Token *mnemonicToken = mnemonicNode->getSymbol();
-  std::string mnemonic = mnemonicToken->getText();
-
-  std::cout << std::setfill('0') << std::setw(2) << std::uppercase << std::hex << +memoryLocation << ": ";
-  ++memoryLocation;
-
-  struct Instruction instruction = Instructions.find(mnemonic)->second;
-  std::cout << std::uppercase << std::hex << +instruction.opcode;
-
-  size_t argumentIdx = 0;
-  for (enum OperandType operandType : instruction.operandTypes) {
-    asmxtoyParser::ArgumentContext *const &argumentCtx = instructionCtx->argument(argumentIdx);
-
-    switch (operandType) {
-      case End:
-        break;
-      case Zero:
-        std::cout << "0";
-        break;
-      case Register: {
-        tree::TerminalNode *registerNode = argumentCtx->REGISTER();
-        Token *registerToken = registerNode->getSymbol();
-        std::string registerStr = registerToken->getText();
-
-        std::cout << std::uppercase << std::hex << registerStr.back();
-        ++argumentIdx;
-        break;
-      }
-      case Address:
-        tree::TerminalNode *addressNode = argumentCtx->ADDRESS();
-        Token *addressToken = addressNode->getSymbol();
-
-        std::cout << addressToken->getText();
-        ++argumentIdx;
-        break;
     }
   }
 
   std::cout << std::endl;
 }
 
-void XToyListenerOutput::exitDirective(asmxtoyParser::DirectiveContext *directiveCtx) {
+void XToyListener::exitDirective(asmxtoyParser::DirectiveContext *directiveCtx) {
   tree::TerminalNode *addressNode = directiveCtx->ADDRESS();
   if (!addressNode) {
     std::cerr << "ORG directive missing memory address" << std::endl;
@@ -223,17 +193,10 @@ int main(void) {
 
   tree::ParseTree* tree = parser.file();
 
-  XToyListenerInfo listenerInfo;
+  std::cout << "Output:" << std::endl;
+  XToyListener listener;
   try {
-    tree::ParseTreeWalker::DEFAULT.walk(&listenerInfo, tree);
-  } catch (const std::exception &) {
-    return EXIT_FAILURE;
-  }
-
-  std::cout << std::endl << "Output:" << std::endl;
-  XToyListenerOutput listenerOutput;
-  try {
-    tree::ParseTreeWalker::DEFAULT.walk(&listenerOutput, tree);
+    tree::ParseTreeWalker::DEFAULT.walk(&listener, tree);
   } catch (const std::exception &) {
     return EXIT_FAILURE;
   }
