@@ -14,7 +14,7 @@ operation
     ;
 
 instruction: MNEMONIC argument*;
-argument: WS (REGISTER | ADDRESS);
+argument: WS? COMMA? WS (REGISTER | ADDRESS);
 
 directive: DOT DIRECTIVE_NAME (WS ADDRESS)?;
 
@@ -45,6 +45,7 @@ REGISTER: 'r' DIGIT;
 ADDRESS: DIGIT DIGIT;
 
 DOT: '.';
+COMMA: ',';
 
 COMMENT: ';' ~[\n\r]*;
 
