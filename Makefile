@@ -47,8 +47,8 @@ $(ANTLRBUILDDIR)/runtime/libantlr4-runtime.a: $(ANTLRBUILDDIR)/Makefile
 	cd $</.. && $(MAKE)
 
 
-$(ASMXTOYSRCDIR)/asmxtoyLexer.cpp $(ASMXTOYSRCDIR)/asmxtoyParser.cpp $(ASMXTOYSRCDIR)/asmxtoyBaseListener.cpp $(ASMXTOYSRCDIR)/asmxtoyLexer.h $(ASMXTOYSRCDIR)/asmxtoyParser.h $(ASMXTOYSRCDIR)/asmxtoyBaseListener.h &: $(ANTLRDIR)/antlr-$(ANTLR_VERSION)-complete.jar | $(ASMXTOYSRCDIR)
-	java -jar $< asmxtoy.g4 -Dlanguage=Cpp -o $(ASMXTOYSRCDIR)
+$(ASMXTOYSRCDIR)/asmxtoyLexer.cpp $(ASMXTOYSRCDIR)/asmxtoyParser.cpp $(ASMXTOYSRCDIR)/asmxtoyBaseListener.cpp $(ASMXTOYSRCDIR)/asmxtoyLexer.h $(ASMXTOYSRCDIR)/asmxtoyParser.h $(ASMXTOYSRCDIR)/asmxtoyBaseListener.h &: $(ANTLRDIR)/antlr-$(ANTLR_VERSION)-complete.jar asmxtoy.g4  | $(ASMXTOYSRCDIR)
+	java -jar $^ -Dlanguage=Cpp -o $(ASMXTOYSRCDIR)
 
 $(ASMXTOYBUILDDIR)/main.cpp.o: main.cpp $(ASMXTOYSRCDIR)/asmxtoyLexer.h $(ASMXTOYSRCDIR)/asmxtoyParser.h $(ASMXTOYSRCDIR)/asmxtoyBaseListener.h $(ANTLRSRCDIR)/extracted | $(ASMXTOYBUILDDIR)
 	$(CXX) -o $@ -c $< -I $(ASMXTOYSRCDIR) -I $(ANTLRSRCDIR)/runtime/src 

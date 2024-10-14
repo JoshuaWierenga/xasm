@@ -21,9 +21,9 @@ enum OperandType {
   Address
 };
 
-std::array<OperandType, 3> OperandFormatRRR = {Register, Register, Register};
-std::array<OperandType, 3> OperandFormatR_R = {Register, Zero, Register};
-std::array<OperandType, 3> OperandFormatRA  = {Register, Address,  End};
+static std::array<OperandType, 3> OperandFormatRRR = {Register, Register, Register};
+static std::array<OperandType, 3> OperandFormatR_R = {Register, Zero, Register};
+static std::array<OperandType, 3> OperandFormatRA  = {Register, Address,  End};
 
 // TODO: Remove registerCount and just use non End operands?
 struct Instruction {
@@ -33,7 +33,7 @@ struct Instruction {
   std::array<OperandType, 3> operandTypes;
 };
 
-std::map<std::string, struct Instruction> Instructions{{
+static std::map<std::string, struct Instruction> Instructions{{
   {"hlt", {0, 0x0, {Zero, Zero, Zero}}},
   {"add", {3, 0x1, OperandFormatRRR}},
   {"sub", {3, 0x2, OperandFormatRRR}},
@@ -53,7 +53,10 @@ std::map<std::string, struct Instruction> Instructions{{
 }};
 
 
-static uint8_t memoryLocation = 0x10;
+static size_t MemoryLocation = 0x10;
+static const size_t MemorySize = UINT8_MAX + 1;
+static std::array<bool, MemorySize> MemoryUsed = {false};
+static std::array<std::string, MemorySize> Memory;
 
 
 class XToyListener : public asmxtoyBaseListener {
@@ -84,12 +87,12 @@ void XToyListener::exitInstruction(asmxtoyParser::InstructionContext *instructio
     throw std::exception();
   }
 
-  // std::cout << "Found instruction " << mnemonic << " with " << argumentCount << " registers" << std::endl;
 
-  std::cout << std::setfill('0') << std::setw(2) << std::uppercase << std::hex << +memoryLocation << ": ";
-  ++memoryLocation;
+  MemoryUsed[MemoryLocation] = true;
+  std::stringstream word;
 
-  std::cout << std::uppercase << std::hex << +instruction.opcode;
+  std::cout << "Found instruction " << mnemonic << " with " << argumentCount << " registers" << std::endl;
+  word << std::uppercase << std::hex << +instruction.opcode;
 
   size_t argumentIdx = 0;
   for (enum OperandType operandType : instruction.operandTypes) {
@@ -101,7 +104,7 @@ void XToyListener::exitInstruction(asmxtoyParser::InstructionContext *instructio
       case End:
         break;
       case Zero:
-        std::cout << "0";
+        word << "0";
         break;
       case Register: {
         // TODO: Report error
@@ -111,18 +114,18 @@ void XToyListener::exitInstruction(asmxtoyParser::InstructionContext *instructio
 
         argumentNode = argumentCtx->REGISTER();
         if (!argumentNode) {
-          std::cerr << "Instruction " << mnemonic << " has incorrect argument at position"
+          std::cerr << "Instruction " << mnemonic << " has incorrect argument at position "
             << argumentIdx << ", expected register" << std::endl;
           std::cerr << mnemonicToken->toString() << std::endl;
           throw std::exception();
         }
 
-        // std::cout << "  Register: ";
+        std::cout << "  Register: ";
 
         argumentToken = argumentNode->getSymbol();
         std::string registerStr = argumentToken->getText();
 
-        std::cout << std::uppercase << std::hex << registerStr.back();
+        word << std::uppercase << std::hex << registerStr.back();
         break;
       }
       case Address:
@@ -133,27 +136,32 @@ void XToyListener::exitInstruction(asmxtoyParser::InstructionContext *instructio
 
         argumentNode = argumentCtx->ADDRESS();
         if (!argumentNode) {
-          std::cerr << "Instruction " << mnemonic << " has incorrect argument at position"
+          std::cerr << "Instruction " << mnemonic << " has incorrect argument at position "
             << argumentIdx << ", expected memory address" << std::endl;
           std::cerr << mnemonicToken->toString() << std::endl;
           throw std::exception();
         }
 
-        // std::cout << "   Address: ";
+        std::cout << "   Address: ";
 
         argumentToken = argumentNode->getSymbol();
 
-        std::cout << argumentNode->getText();
+        word << argumentNode->getText();
         break;
     }
 
     if (argumentToken) {
-      // std::cout << argumentToken->getText() << std::endl;
+      std::cout << argumentToken->getText() << std::endl;
       ++argumentIdx;
     }
   }
 
-  std::cout << std::endl;
+  Memory[MemoryLocation] = word.str();
+  ++MemoryLocation;
+  if (MemoryLocation >= MemorySize) {
+    std::cerr << "Memory address has exceeded max size" << std::endl;
+    throw std::exception();
+  }
 }
 
 void XToyListener::exitDirective(asmxtoyParser::DirectiveContext *directiveCtx) {
@@ -171,16 +179,16 @@ void XToyListener::exitDirective(asmxtoyParser::DirectiveContext *directiveCtx) 
   // Need to also track written values to split unwritten from hlt written explicitly
   // Can restore debug message then
   uint_fast8_t newMemoryLocation = std::stoi(address, nullptr, 16);
-  if (newMemoryLocation <= memoryLocation) {
+  if (newMemoryLocation <= MemoryLocation) {
     Token *addressToken = addressNode->getSymbol();
     std::cerr << "ORG direction will smaller memory address not allowed, current address is "
-      << std::setfill('0') << std::setw(2) << std::uppercase << std::hex << +memoryLocation <<
-      ", requested address is " << address << std::endl;
+      << std::setfill('0') << std::setw(2) << std::uppercase << std::hex << MemoryLocation
+      << ", requested address is " << address << std::endl;
     std::cerr << addressToken->toString() << std::endl;
     throw std::exception();
   }
 
-  memoryLocation = newMemoryLocation;
+  MemoryLocation = newMemoryLocation;
 }
 
 
@@ -193,12 +201,19 @@ int main(void) {
 
   tree::ParseTree* tree = parser.file();
 
-  std::cout << "Output:" << std::endl;
   XToyListener listener;
   try {
     tree::ParseTreeWalker::DEFAULT.walk(&listener, tree);
   } catch (const std::exception &) {
     return EXIT_FAILURE;
+  }
+
+  std::cout << std::endl << "Output:" << std::endl;
+  for (size_t i = 0; i < MemorySize; ++i) {
+    if (MemoryUsed[i]) {
+      std::cout << std::setfill('0') << std::setw(2) << std::uppercase << std::hex
+        << i << ": " << Memory[i] << std::endl;
+    }
   }
 
   return EXIT_SUCCESS;
