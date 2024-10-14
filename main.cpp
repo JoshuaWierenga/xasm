@@ -160,6 +160,12 @@ void XToyListener::exitInstruction(asmxtoyParser::InstructionContext *instructio
   ++MemoryLocation;
   if (MemoryLocation >= MemorySize) {
     std::cerr << "Memory address has exceeded max size" << std::endl;
+    std::cerr << mnemonicToken->toString() << std::endl;
+    throw std::exception();
+  }
+  if (MemoryUsed[MemoryLocation]) {
+    std::cerr << "Memory address hit an existing adddress which is not allowed" << std::endl;
+    std::cerr << mnemonicToken->toString() << std::endl;
     throw std::exception();
   }
 }
@@ -172,23 +178,17 @@ void XToyListener::exitDirective(asmxtoyParser::DirectiveContext *directiveCtx) 
   }
 
   std::string address = addressNode->toString();
-  // std::cout << "Found direction ORG with address " << address << std::endl;
+  std::cout << "Found directive ORG with address " << address << std::endl;
 
-  // TODO: Allow out of order memory locations?
-  // Can do by putting instructions into an array first and then write out in order
-  // Need to also track written values to split unwritten from hlt written explicitly
-  // Can restore debug message then
-  uint_fast8_t newMemoryLocation = std::stoi(address, nullptr, 16);
-  if (newMemoryLocation <= MemoryLocation) {
+  size_t newMemoryLocation = std::stoi(address, nullptr, 16);
+  if (MemoryUsed[newMemoryLocation]) {
     Token *addressToken = addressNode->getSymbol();
-    std::cerr << "ORG direction will smaller memory address not allowed, current address is "
-      << std::setfill('0') << std::setw(2) << std::uppercase << std::hex << MemoryLocation
-      << ", requested address is " << address << std::endl;
+    std::cerr << "ORG directive with an existing adddress is not allowed" << std::endl;
     std::cerr << addressToken->toString() << std::endl;
     throw std::exception();
   }
 
-  MemoryLocation = newMemoryLocation;
+  MemoryLocation = std::stoi(address, nullptr, 16);
 }
 
 
