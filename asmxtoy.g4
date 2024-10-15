@@ -10,13 +10,16 @@ line
 operation
     : instruction
     | directive
+    | label
     | COMMENT
     ;
 
 instruction: MNEMONIC argument*;
-argument: WS? COMMA? WS (REGISTER | ADDRESS);
+argument: WS? COMMA? WS (REGISTER | ADDRESS | LABEL_USE);
 
-directive: DOT DIRECTIVE_NAME (WS ADDRESS)?;
+directive: DOT DIRECTIVE_NAME WS ADDRESS;
+
+label: LABEL_DEF;
 
 MNEMONIC
     : 'hlt' // 0XXX
@@ -43,6 +46,10 @@ DIGIT: [0-9A-F];
 
 REGISTER: 'r' DIGIT;
 ADDRESS: DIGIT DIGIT;
+
+LABEL_DEF: LABEL_NAME ':';
+LABEL_USE: '$' LABEL_NAME;
+LABEL_NAME: ~[ \t\n\r:,$.]+;
 
 DOT: '.';
 COMMA: ',';

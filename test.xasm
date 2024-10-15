@@ -1,23 +1,9 @@
-; This is a test
-lda r1 15
-add r2 r1 r1
-str r2 FF
-hlt
+    brz r0, $main
 
-.ORG 30
-hlt
-add r1 r2 r3
-sub r4 r5 r6
-and r7 r8 r9
-xor rA rB rC
-asl rD rE rF
-asr r1 r2 r3
-lda r4 00
-lod r5 01
-str r6 02
-ldi r7 r8
-sti r8 rA
-brz rB 03
-brp rC 04
-jmp rD
-jsr rE 05
+test:
+    str r0, FF
+    jmp r7
+
+main:
+    jsr r7, $test
+    hlt

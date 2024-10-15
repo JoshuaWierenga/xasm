@@ -52,22 +52,31 @@ static std::map<std::string, struct Instruction> Instructions{{
   {"jsr", {2, 0xF, OperandFormatRA}}
 }};
 
-
-static size_t MemoryLocation = 0x10;
-static const size_t MemorySize = UINT8_MAX + 1;
+static std::size_t MemoryLocation = 0x10;
+static const std::size_t MemorySize = UINT8_MAX + 1;
 static std::array<bool, MemorySize> MemoryUsed = {false};
 static std::array<std::string, MemorySize> Memory;
 
+static std::map<std::string, std::size_t> Labels;
 
-class XToyListener : public asmxtoyBaseListener {
+
+// Error checking and label finding
+class XToyPreListener : public asmxtoyBaseListener {
+public:
+  void exitInstruction(asmxtoyParser::InstructionContext *) override;
+  void exitDirective(asmxtoyParser::DirectiveContext *) override;
+  void exitLabel(asmxtoyParser::LabelContext *) override;
+};
+
+class XToyOutputListener : public asmxtoyBaseListener {
 public:
   void exitInstruction(asmxtoyParser::InstructionContext *) override;
   void exitDirective(asmxtoyParser::DirectiveContext *) override;
 };
 
-void XToyListener::exitInstruction(asmxtoyParser::InstructionContext *instructionCtx) {
-  tree::TerminalNode *mnemonicNode = instructionCtx->MNEMONIC();
-  Token *mnemonicToken = mnemonicNode->getSymbol();
+
+void XToyPreListener::exitInstruction(asmxtoyParser::InstructionContext *instructionCtx) {
+  Token *mnemonicToken = instructionCtx->MNEMONIC()->getSymbol();
   std::string mnemonic = mnemonicToken->getText();
 
   auto instructionIter = Instructions.find(mnemonic);
@@ -78,8 +87,7 @@ void XToyListener::exitInstruction(asmxtoyParser::InstructionContext *instructio
   }
 
   struct Instruction instruction = instructionIter->second;
-  std::vector<asmxtoyParser::ArgumentContext *> arguments = instructionCtx->argument();
-  std:size_t argumentCount = arguments.size();
+  std:size_t argumentCount = instructionCtx->argument().size();
   if (instruction.registerCount != argumentCount) {
     std::cerr << "Instruction " << mnemonic << " has incorrect argument count " << argumentCount
       << ", expected " << instruction.registerCount << std::endl;
@@ -87,24 +95,18 @@ void XToyListener::exitInstruction(asmxtoyParser::InstructionContext *instructio
     throw std::exception();
   }
 
-
-  MemoryUsed[MemoryLocation] = true;
-  std::stringstream word;
-
+#ifndef NDEBUG
   std::cout << "Found instruction " << mnemonic << " with " << argumentCount << " registers" << std::endl;
-  word << std::uppercase << std::hex << +instruction.opcode;
+#endif
 
-  size_t argumentIdx = 0;
+  std::size_t argumentIdx = 0;
   for (enum OperandType operandType : instruction.operandTypes) {
     asmxtoyParser::ArgumentContext *const &argumentCtx = instructionCtx->argument(argumentIdx);
-    tree::TerminalNode *argumentNode;
-    Token *argumentToken = nullptr;
+    tree::TerminalNode *argumentNode = nullptr;
 
     switch (operandType) {
       case End:
-        break;
       case Zero:
-        word << "0";
         break;
       case Register: {
         // TODO: Report error
@@ -120,12 +122,9 @@ void XToyListener::exitInstruction(asmxtoyParser::InstructionContext *instructio
           throw std::exception();
         }
 
+#ifndef NDEBUG
         std::cout << "  Register: ";
-
-        argumentToken = argumentNode->getSymbol();
-        std::string registerStr = argumentToken->getText();
-
-        word << std::uppercase << std::hex << registerStr.back();
+#endif
         break;
       }
       case Address:
@@ -135,52 +134,51 @@ void XToyListener::exitInstruction(asmxtoyParser::InstructionContext *instructio
         }
 
         argumentNode = argumentCtx->ADDRESS();
+        if (argumentNode) {
+#ifndef NDEBUG
+          std::cout << "   Address: ";
+#endif
+        } else{
+          argumentNode = argumentCtx->LABEL_USE();
+#ifndef NDEBUG
+          std::cout << "     Label: ";
+#endif
+        }
+
         if (!argumentNode) {
           std::cerr << "Instruction " << mnemonic << " has incorrect argument at position "
-            << argumentIdx << ", expected memory address" << std::endl;
+            << argumentIdx << ", expected memory address or label" << std::endl;
           std::cerr << mnemonicToken->toString() << std::endl;
           throw std::exception();
         }
-
-        std::cout << "   Address: ";
-
-        argumentToken = argumentNode->getSymbol();
-
-        word << argumentNode->getText();
         break;
     }
 
-    if (argumentToken) {
-      std::cout << argumentToken->getText() << std::endl;
+    if (argumentNode) {
+#ifndef NDEBUG
+      std::cout << argumentNode->getText() << std::endl;
+#endif
       ++argumentIdx;
     }
   }
 
-  Memory[MemoryLocation] = word.str();
   ++MemoryLocation;
   if (MemoryLocation >= MemorySize) {
     std::cerr << "Memory address has exceeded max size" << std::endl;
     std::cerr << mnemonicToken->toString() << std::endl;
     throw std::exception();
   }
-  if (MemoryUsed[MemoryLocation]) {
-    std::cerr << "Memory address hit an existing adddress which is not allowed" << std::endl;
-    std::cerr << mnemonicToken->toString() << std::endl;
-    throw std::exception();
-  }
 }
 
-void XToyListener::exitDirective(asmxtoyParser::DirectiveContext *directiveCtx) {
+void XToyPreListener::exitDirective(asmxtoyParser::DirectiveContext *directiveCtx) {
   tree::TerminalNode *addressNode = directiveCtx->ADDRESS();
-  if (!addressNode) {
-    std::cerr << "ORG directive missing memory address" << std::endl;
-    throw std::exception();
-  }
 
   std::string address = addressNode->toString();
+#ifndef NDEBUG
   std::cout << "Found directive ORG with address " << address << std::endl;
+#endif
 
-  size_t newMemoryLocation = std::stoi(address, nullptr, 16);
+  std::size_t newMemoryLocation = std::stoi(address, nullptr, 16);
   if (MemoryUsed[newMemoryLocation]) {
     Token *addressToken = addressNode->getSymbol();
     std::cerr << "ORG directive with an existing adddress is not allowed" << std::endl;
@@ -188,7 +186,90 @@ void XToyListener::exitDirective(asmxtoyParser::DirectiveContext *directiveCtx) 
     throw std::exception();
   }
 
-  MemoryLocation = std::stoi(address, nullptr, 16);
+  MemoryLocation = newMemoryLocation;
+}
+
+void XToyPreListener::exitLabel(asmxtoyParser::LabelContext *labelCtx) {
+  tree::TerminalNode *labelNode = labelCtx->LABEL_DEF();
+
+  std::string label = labelNode->toString();
+  label.pop_back();
+
+#ifndef NDEBUG
+  std::cout << std::setfill('0') << std::setw(2) << std::uppercase << std::hex
+    << "Found label " << label << " with address " << MemoryLocation << std::endl;
+#endif
+
+  if (Labels.count(label) == 1) {
+    Token *labelToken = labelNode->getSymbol();
+    std::cerr << "Cannot redefine label" << std::endl;
+    std::cerr << labelToken->toString() << std::endl;
+    throw std::exception();
+  }
+
+  Labels[label] = MemoryLocation;
+}
+
+
+void XToyOutputListener::exitInstruction(asmxtoyParser::InstructionContext *instructionCtx) {
+  Token *mnemonicToken = instructionCtx->MNEMONIC()->getSymbol();
+  std::string mnemonic = mnemonicToken->getText();
+  struct Instruction instruction = Instructions.find(mnemonic)->second;
+
+  std::stringstream word;
+  word << std::uppercase << std::hex << +instruction.opcode;
+
+  std::size_t argumentIdx = 0;
+  for (enum OperandType operandType : instruction.operandTypes) {
+    asmxtoyParser::ArgumentContext *const &argumentCtx = instructionCtx->argument(argumentIdx);
+
+    switch (operandType) {
+      case End:
+        break;
+      case Zero:
+        word << "0";
+        break;
+      case Register: {
+        std::string registerStr = argumentCtx->REGISTER()->getText();
+        word << std::uppercase << std::hex << registerStr.back();
+        ++argumentIdx;
+        break;
+      }
+      case Address:
+        tree::TerminalNode *addressNode = argumentCtx->ADDRESS();
+        if (addressNode) {
+          word << addressNode->getText();
+        } else {
+          std::string labelStr = argumentCtx->LABEL_USE()->getText();
+          labelStr.erase(0, 1);
+
+          if (Labels.count(labelStr) == 0) {
+            std::cerr << "Cannot reference undefined label" << std::endl;
+            std::cerr << mnemonicToken->toString() << std::endl;
+            throw std::exception();
+          }
+
+          word << Labels[labelStr];
+        }
+
+        ++argumentIdx;
+        break;
+    }
+  }
+
+  MemoryUsed[MemoryLocation] = true;
+  Memory[MemoryLocation] = word.str();
+  ++MemoryLocation;
+  if (MemoryUsed[MemoryLocation]) {
+    std::cerr << "Memory address hit an existing adddress which is not allowed" << std::endl;
+    std::cerr << mnemonicToken->toString() << std::endl;
+    throw std::exception();
+  }
+}
+
+void XToyOutputListener::exitDirective(asmxtoyParser::DirectiveContext *directiveCtx) {
+  std::string address = directiveCtx->ADDRESS()->toString();
+  MemoryLocation = std::stoi(address, nullptr, 16);;
 }
 
 
@@ -201,15 +282,18 @@ int main(void) {
 
   tree::ParseTree* tree = parser.file();
 
-  XToyListener listener;
+  XToyPreListener preListener;
+  XToyOutputListener outputListener;
   try {
-    tree::ParseTreeWalker::DEFAULT.walk(&listener, tree);
+    tree::ParseTreeWalker::DEFAULT.walk(&preListener, tree);
+    MemoryLocation = 0x10;
+    tree::ParseTreeWalker::DEFAULT.walk(&outputListener, tree);
   } catch (const std::exception &) {
     return EXIT_FAILURE;
   }
 
   std::cout << std::endl << "Output:" << std::endl;
-  for (size_t i = 0; i < MemorySize; ++i) {
+  for (std::size_t i = 0; i < MemorySize; ++i) {
     if (MemoryUsed[i]) {
       std::cout << std::setfill('0') << std::setw(2) << std::uppercase << std::hex
         << i << ": " << Memory[i] << std::endl;
