@@ -33,7 +33,7 @@ struct Instruction {
   std::array<OperandType, 3> operandTypes;
 };
 
-static std::map<std::string, struct Instruction> Instructions{{
+static std::unordered_map<std::string, struct Instruction> Instructions{{
   {"hlt", {0, 0x0, {Zero, Zero, Zero}}},
   {"add", {3, 0x1, OperandFormatRRR}},
   {"sub", {3, 0x2, OperandFormatRRR}},
@@ -52,12 +52,41 @@ static std::map<std::string, struct Instruction> Instructions{{
   {"jsr", {2, 0xF, OperandFormatRA}}
 }};
 
+
+enum DirectiveName {
+  ORG,
+  WORD
+};
+
+struct Directive {
+  enum DirectiveName name;
+  uint_fast8_t argumentLength;
+};
+
+static std::unordered_map<std::string, struct Directive> Directives({
+  {"ORG", {DirectiveName::ORG, 2}},
+  {"WORD", {DirectiveName::WORD, 4}}
+});
+
+
 static std::size_t MemoryLocation = 0x10;
 static const std::size_t MemorySize = UINT8_MAX + 1;
 static std::array<bool, MemorySize> MemoryUsed = {false};
 static std::array<std::string, MemorySize> Memory;
 
-static std::map<std::string, std::size_t> Labels;
+static std::unordered_map<std::string, std::size_t> Labels;
+
+
+static void SetMemoryLocation(std::string word, Token *token) {
+  MemoryUsed[MemoryLocation] = true;
+  Memory[MemoryLocation] = word;
+  ++MemoryLocation;
+  if (MemoryUsed[MemoryLocation]) {
+    std::cerr << "Memory address hit an existing adddress which is not allowed" << std::endl;
+    std::cerr << token->toString() << std::endl;
+    throw std::exception();
+  }
+}
 
 
 // Error checking and label finding
@@ -87,7 +116,7 @@ void XToyPreListener::exitInstruction(asmxtoyParser::InstructionContext *instruc
   }
 
   struct Instruction instruction = instructionIter->second;
-  std:size_t argumentCount = instructionCtx->argument().size();
+  std::size_t argumentCount = instructionCtx->argument().size();
   if (instruction.registerCount != argumentCount) {
     std::cerr << "Instruction " << mnemonic << " has incorrect argument count " << argumentCount
       << ", expected " << instruction.registerCount << std::endl;
@@ -96,7 +125,7 @@ void XToyPreListener::exitInstruction(asmxtoyParser::InstructionContext *instruc
   }
 
 #ifndef NDEBUG
-  std::cout << "Found instruction " << mnemonic << " with " << argumentCount << " registers" << std::endl;
+  std::cout << "Found instruction " << mnemonic << " with " << argumentCount << " arguments" << std::endl;
 #endif
 
   std::size_t argumentIdx = 0;
@@ -133,7 +162,17 @@ void XToyPreListener::exitInstruction(asmxtoyParser::InstructionContext *instruc
           throw std::exception();
         }
 
-        argumentNode = argumentCtx->ADDRESS();
+        argumentNode = argumentCtx->IMMEDIATE();
+        if (argumentNode) {
+          std::string address = argumentNode->getSymbol()->getText();
+          if (address.length() != 2) {
+            std::cerr << "Instruction " << mnemonic << " has incorrect argument at position "
+              << argumentIdx << ", expected 2 digit memory address" << std::endl;
+            std::cerr << mnemonicToken->toString() << std::endl;
+            throw std::exception();
+          }
+        }
+
         if (argumentNode) {
 #ifndef NDEBUG
           std::cout << "   Address: ";
@@ -156,7 +195,7 @@ void XToyPreListener::exitInstruction(asmxtoyParser::InstructionContext *instruc
 
     if (argumentNode) {
 #ifndef NDEBUG
-      std::cout << argumentNode->getText() << std::endl;
+      std::cout << argumentNode->getSymbol()->getText() << std::endl;
 #endif
       ++argumentIdx;
     }
@@ -171,28 +210,56 @@ void XToyPreListener::exitInstruction(asmxtoyParser::InstructionContext *instruc
 }
 
 void XToyPreListener::exitDirective(asmxtoyParser::DirectiveContext *directiveCtx) {
-  tree::TerminalNode *addressNode = directiveCtx->ADDRESS();
+  Token *directiveToken = directiveCtx->DIRECTIVE_NAME()->getSymbol();
+  Token *argumentToken = directiveCtx->IMMEDIATE()->getSymbol();
+  std::string directive = directiveToken->getText();
+  std::string argument = argumentToken->getText();
 
-  std::string address = addressNode->toString();
 #ifndef NDEBUG
-  std::cout << "Found directive ORG with address " << address << std::endl;
+  std::cout << "Found directive " << directive << " with argument "
+    << argument << std::endl;
 #endif
 
-  std::size_t newMemoryLocation = std::stoi(address, nullptr, 16);
-  if (MemoryUsed[newMemoryLocation]) {
-    Token *addressToken = addressNode->getSymbol();
-    std::cerr << "ORG directive with an existing adddress is not allowed" << std::endl;
-    std::cerr << addressToken->toString() << std::endl;
+  if (Directives.count(directive) != 1) {
+    std::cerr << "directive " << directive << " does not exist" << std::endl;
+    std::cerr << directiveToken->toString() << std::endl;
     throw std::exception();
   }
 
-  MemoryLocation = newMemoryLocation;
+  struct Directive directiveInfo = Directives[directive];
+  if (argument.length() != directiveInfo.argumentLength) {
+    std::cerr << "directive " << directive << " expects an argument of length "
+      << +directiveInfo.argumentLength << " but one of length " << argument.length()
+      << " given" << std::endl;
+    std::cerr << argumentToken->toString() << std::endl;
+    throw std::exception();
+  }
+
+  // TODO: Ensure argument is a hex int
+
+  switch (directiveInfo.name) {
+    case DirectiveName::ORG: {
+      std::size_t newMemoryLocation = std::stoi(argument, nullptr, 16);
+      if (MemoryUsed[newMemoryLocation]) {
+        std::cerr << "ORG directive with an existing adddress is not allowed" << std::endl;
+        std::cerr << argumentToken->toString() << std::endl;
+        throw std::exception();
+      }
+
+      MemoryLocation = newMemoryLocation;
+      }
+      break;
+    case DirectiveName::WORD:
+      ++MemoryLocation;
+      break;
+  }
+
 }
 
 void XToyPreListener::exitLabel(asmxtoyParser::LabelContext *labelCtx) {
-  tree::TerminalNode *labelNode = labelCtx->LABEL_DEF();
+  Token *labelToken = labelCtx->LABEL_DEF()->getSymbol();
 
-  std::string label = labelNode->toString();
+  std::string label = labelToken->getText();
   label.pop_back();
 
 #ifndef NDEBUG
@@ -201,7 +268,6 @@ void XToyPreListener::exitLabel(asmxtoyParser::LabelContext *labelCtx) {
 #endif
 
   if (Labels.count(label) == 1) {
-    Token *labelToken = labelNode->getSymbol();
     std::cerr << "Cannot redefine label" << std::endl;
     std::cerr << labelToken->toString() << std::endl;
     throw std::exception();
@@ -230,17 +296,17 @@ void XToyOutputListener::exitInstruction(asmxtoyParser::InstructionContext *inst
         word << "0";
         break;
       case Register: {
-        std::string registerStr = argumentCtx->REGISTER()->getText();
+        std::string registerStr = argumentCtx->REGISTER()->getSymbol()->getText();
         word << std::uppercase << std::hex << registerStr.back();
         ++argumentIdx;
         break;
       }
       case Address:
-        tree::TerminalNode *addressNode = argumentCtx->ADDRESS();
+        tree::TerminalNode *addressNode = argumentCtx->IMMEDIATE();
         if (addressNode) {
-          word << addressNode->getText();
+          word << addressNode->getSymbol()->getText();
         } else {
-          std::string labelStr = argumentCtx->LABEL_USE()->getText();
+          std::string labelStr = argumentCtx->LABEL_USE()->getSymbol()->getText();
           labelStr.erase(0, 1);
 
           if (Labels.count(labelStr) == 0) {
@@ -257,19 +323,23 @@ void XToyOutputListener::exitInstruction(asmxtoyParser::InstructionContext *inst
     }
   }
 
-  MemoryUsed[MemoryLocation] = true;
-  Memory[MemoryLocation] = word.str();
-  ++MemoryLocation;
-  if (MemoryUsed[MemoryLocation]) {
-    std::cerr << "Memory address hit an existing adddress which is not allowed" << std::endl;
-    std::cerr << mnemonicToken->toString() << std::endl;
-    throw std::exception();
-  }
+  SetMemoryLocation(word.str(), mnemonicToken);
 }
 
 void XToyOutputListener::exitDirective(asmxtoyParser::DirectiveContext *directiveCtx) {
-  std::string address = directiveCtx->ADDRESS()->toString();
-  MemoryLocation = std::stoi(address, nullptr, 16);;
+  std::string directive = directiveCtx->DIRECTIVE_NAME()->getSymbol()->getText();
+  Token *argumentToken = directiveCtx->IMMEDIATE()->getSymbol();
+  std::string argument = argumentToken->getText();
+  struct Directive directiveInfo = Directives[directive];
+
+  switch (directiveInfo.name) {
+    case DirectiveName::ORG:
+      MemoryLocation = std::stoi(argument, nullptr, 16);
+      break;
+    case DirectiveName::WORD:
+      SetMemoryLocation(argument, argumentToken);
+      break;
+  }
 }
 
 

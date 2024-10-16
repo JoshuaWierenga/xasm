@@ -15,9 +15,9 @@ operation
     ;
 
 instruction: MNEMONIC argument*;
-argument: WS? COMMA? WS (REGISTER | ADDRESS | LABEL_USE);
+argument: WS? (COMMA | WS) WS? (REGISTER | IMMEDIATE | LABEL_USE);
 
-directive: DOT DIRECTIVE_NAME WS ADDRESS;
+directive: DOT DIRECTIVE_NAME WS IMMEDIATE;
 
 label: LABEL_DEF;
 
@@ -40,12 +40,15 @@ MNEMONIC
     | 'jsr' // FXXX
     ;
 
-DIRECTIVE_NAME: 'ORG';
+DIRECTIVE_NAME
+    : 'ORG'
+    | 'WORD'
+    ;
 
 DIGIT: [0-9A-F];
 
 REGISTER: 'r' DIGIT;
-ADDRESS: DIGIT DIGIT;
+IMMEDIATE: DIGIT+;
 
 LABEL_DEF: LABEL_NAME ':';
 LABEL_USE: '$' LABEL_NAME;
