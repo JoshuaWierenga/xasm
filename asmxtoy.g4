@@ -15,11 +15,11 @@ operation
     ;
 
 instruction: MNEMONIC argument*;
-argument: WS? (COMMA | WS) WS? (REGISTER | IMMEDIATE | LABEL_USE);
+argument: WS? (COMMA | WS) WS? (REGISTER | HALFWORD | LABEL);
 
-directive: DOT DIRECTIVE_NAME WS IMMEDIATE;
+directive: DOT DIRECTIVE_NAME WS WORD;
 
-label: LABEL_DEF;
+label: LABEL COLON;
 
 MNEMONIC
     : 'hlt' // 0XXX
@@ -45,18 +45,15 @@ DIRECTIVE_NAME
     | 'WORD'
     ;
 
-DIGIT: [0-9A-F];
-
-REGISTER: 'r' DIGIT;
-IMMEDIATE: DIGIT+;
-
-LABEL_DEF: LABEL_NAME ':';
-LABEL_USE: '$' LABEL_NAME;
-LABEL_NAME: ~[ \t\n\r:,$.]+;
-
-DOT: '.';
 COMMA: ',';
+COLON: ':';
+DOT: '.';
 
+REGISTER: 'r' [0-9A-F];
+HALFWORD: [0-9A-F] [0-9A-F];
+WORD: HALFWORD HALFWORD;
+
+LABEL: ~[ \t\n\r:,0-9] ~[ \t\n\r:,]*;
 COMMENT: ';' ~[\n\r]*;
 
 WS: [ \t]+;

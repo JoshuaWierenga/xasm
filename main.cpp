@@ -162,7 +162,7 @@ void XToyPreListener::exitInstruction(asmxtoyParser::InstructionContext *instruc
           throw std::exception();
         }
 
-        argumentNode = argumentCtx->IMMEDIATE();
+        argumentNode = argumentCtx->HALFWORD();
         if (argumentNode) {
           std::string address = argumentNode->getSymbol()->getText();
           if (address.length() != 2) {
@@ -178,7 +178,7 @@ void XToyPreListener::exitInstruction(asmxtoyParser::InstructionContext *instruc
           std::cout << "   Address: ";
 #endif
         } else{
-          argumentNode = argumentCtx->LABEL_USE();
+          argumentNode = argumentCtx->LABEL();
 #ifndef NDEBUG
           std::cout << "     Label: ";
 #endif
@@ -211,7 +211,7 @@ void XToyPreListener::exitInstruction(asmxtoyParser::InstructionContext *instruc
 
 void XToyPreListener::exitDirective(asmxtoyParser::DirectiveContext *directiveCtx) {
   Token *directiveToken = directiveCtx->DIRECTIVE_NAME()->getSymbol();
-  Token *argumentToken = directiveCtx->IMMEDIATE()->getSymbol();
+  Token *argumentToken = directiveCtx->WORD()->getSymbol();
   std::string directive = directiveToken->getText();
   std::string argument = argumentToken->getText();
 
@@ -257,10 +257,8 @@ void XToyPreListener::exitDirective(asmxtoyParser::DirectiveContext *directiveCt
 }
 
 void XToyPreListener::exitLabel(asmxtoyParser::LabelContext *labelCtx) {
-  Token *labelToken = labelCtx->LABEL_DEF()->getSymbol();
-
+  Token *labelToken = labelCtx->LABEL()->getSymbol();
   std::string label = labelToken->getText();
-  label.pop_back();
 
 #ifndef NDEBUG
   std::cout << std::setfill('0') << std::setw(2) << std::uppercase << std::hex
@@ -302,12 +300,11 @@ void XToyOutputListener::exitInstruction(asmxtoyParser::InstructionContext *inst
         break;
       }
       case Address:
-        tree::TerminalNode *addressNode = argumentCtx->IMMEDIATE();
+        tree::TerminalNode *addressNode = argumentCtx->HALFWORD();
         if (addressNode) {
           word << addressNode->getSymbol()->getText();
         } else {
-          std::string labelStr = argumentCtx->LABEL_USE()->getSymbol()->getText();
-          labelStr.erase(0, 1);
+          std::string labelStr = argumentCtx->LABEL()->getSymbol()->getText();
 
           if (Labels.count(labelStr) == 0) {
             std::cerr << "Cannot reference undefined label" << std::endl;
@@ -328,7 +325,7 @@ void XToyOutputListener::exitInstruction(asmxtoyParser::InstructionContext *inst
 
 void XToyOutputListener::exitDirective(asmxtoyParser::DirectiveContext *directiveCtx) {
   std::string directive = directiveCtx->DIRECTIVE_NAME()->getSymbol()->getText();
-  Token *argumentToken = directiveCtx->IMMEDIATE()->getSymbol();
+  Token *argumentToken = directiveCtx->WORD()->getSymbol();
   std::string argument = argumentToken->getText();
   struct Directive directiveInfo = Directives[directive];
 
