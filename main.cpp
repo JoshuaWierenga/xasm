@@ -210,10 +210,12 @@ void XToyPreListener::exitInstruction(asmxtoyParser::InstructionContext *instruc
 }
 
 void XToyPreListener::exitDirective(asmxtoyParser::DirectiveContext *directiveCtx) {
-  Token *directiveToken = directiveCtx->DIRECTIVE_NAME()->getSymbol();
+  Token *directiveToken = directiveCtx->DIRECTIVE()->getSymbol();
   Token *argumentToken = directiveCtx->WORD()->getSymbol();
   std::string directive = directiveToken->getText();
   std::string argument = argumentToken->getText();
+
+  directive.erase(0, 1);
 
 #ifndef NDEBUG
   std::cout << "Found directive " << directive << " with argument "
@@ -324,9 +326,11 @@ void XToyOutputListener::exitInstruction(asmxtoyParser::InstructionContext *inst
 }
 
 void XToyOutputListener::exitDirective(asmxtoyParser::DirectiveContext *directiveCtx) {
-  std::string directive = directiveCtx->DIRECTIVE_NAME()->getSymbol()->getText();
+  std::string directive = directiveCtx->DIRECTIVE()->getSymbol()->getText();
   Token *argumentToken = directiveCtx->WORD()->getSymbol();
   std::string argument = argumentToken->getText();
+
+  directive.erase(0, 1);
   struct Directive directiveInfo = Directives[directive];
 
   switch (directiveInfo.name) {

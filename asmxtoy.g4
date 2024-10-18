@@ -17,7 +17,7 @@ operation
 instruction: MNEMONIC argument*;
 argument: WS? (COMMA | WS) WS? (REGISTER | HALFWORD | LABEL);
 
-directive: DOT DIRECTIVE_NAME WS WORD;
+directive: DIRECTIVE WS WORD;
 
 label: LABEL COLON;
 
@@ -40,14 +40,13 @@ MNEMONIC
     | 'jsr' // FXXX
     ;
 
-DIRECTIVE_NAME
-    : 'ORG'
+DIRECTIVE: '.' (
+    'ORG'
     | 'WORD'
-    ;
+    );
 
 COMMA: ',';
 COLON: ':';
-DOT: '.';
 
 REGISTER: 'r' [0-9A-F];
 HALFWORD: [0-9A-F] [0-9A-F];
