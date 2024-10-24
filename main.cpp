@@ -131,7 +131,7 @@ void XToyPreListener::exitInstruction(asmxtoyParser::InstructionContext *instruc
   std::size_t argumentIdx = 0;
   for (enum OperandType operandType : instruction.operandTypes) {
     asmxtoyParser::ArgumentContext *const &argumentCtx = instructionCtx->argument(argumentIdx);
-    tree::TerminalNode *argumentNode = nullptr;
+    Token *argumentToken = nullptr;
 
     switch (operandType) {
       case End:
@@ -143,10 +143,10 @@ void XToyPreListener::exitInstruction(asmxtoyParser::InstructionContext *instruc
           throw std::exception();
         }
 
-        argumentNode = argumentCtx->REGISTER();
-        if (!argumentNode) {
+        tree::TerminalNode *registerNode = argumentCtx->REGISTER();
+        if (!registerNode) {
           std::cerr << "Instruction " << mnemonic << " has incorrect argument at position "
-            << argumentIdx << ", expected register" << std::endl;
+            << (argumentIdx + 1) << ", expected register" << std::endl;
           std::cerr << mnemonicToken->toString() << std::endl;
           throw std::exception();
         }
@@ -154,6 +154,7 @@ void XToyPreListener::exitInstruction(asmxtoyParser::InstructionContext *instruc
 #ifndef NDEBUG
         std::cout << "  Register: ";
 #endif
+        argumentToken = registerNode->getSymbol();
         break;
       }
       case Address:
@@ -162,40 +163,39 @@ void XToyPreListener::exitInstruction(asmxtoyParser::InstructionContext *instruc
           throw std::exception();
         }
 
-        argumentNode = argumentCtx->HALFWORD();
-        if (argumentNode) {
-          std::string address = argumentNode->getSymbol()->getText();
+        tree::TerminalNode *halfWordNode = argumentCtx->HALFWORD();
+        if (halfWordNode) {
+          argumentToken = halfWordNode->getSymbol();
+          std::string address = argumentToken->getText();
           if (address.length() != 2) {
             std::cerr << "Instruction " << mnemonic << " has incorrect argument at position "
-              << argumentIdx << ", expected 2 digit memory address" << std::endl;
+              << (argumentIdx + 1) << ", expected 2 digit memory address" << std::endl;
             std::cerr << mnemonicToken->toString() << std::endl;
             throw std::exception();
           }
-        }
 
-        if (argumentNode) {
 #ifndef NDEBUG
           std::cout << "   Address: ";
 #endif
-        } else{
-          argumentNode = argumentCtx->LABEL();
+        } else {
+          argumentToken = argumentCtx->getStop();
 #ifndef NDEBUG
           std::cout << "     Label: ";
 #endif
         }
 
-        if (!argumentNode) {
+        if (!argumentToken) {
           std::cerr << "Instruction " << mnemonic << " has incorrect argument at position "
-            << argumentIdx << ", expected memory address or label" << std::endl;
+            << (argumentIdx + 1) << ", expected memory address or label" << std::endl;
           std::cerr << mnemonicToken->toString() << std::endl;
           throw std::exception();
         }
         break;
     }
 
-    if (argumentNode) {
+    if (argumentToken) {
 #ifndef NDEBUG
-      std::cout << argumentNode->getSymbol()->getText() << std::endl;
+      std::cout << argumentToken->getText() << std::endl;
 #endif
       ++argumentIdx;
     }
@@ -259,7 +259,7 @@ void XToyPreListener::exitDirective(asmxtoyParser::DirectiveContext *directiveCt
 }
 
 void XToyPreListener::exitLabel(asmxtoyParser::LabelContext *labelCtx) {
-  Token *labelToken = labelCtx->LABEL()->getSymbol();
+  Token *labelToken = labelCtx->getStart();
   std::string label = labelToken->getText();
 
 #ifndef NDEBUG
@@ -306,7 +306,7 @@ void XToyOutputListener::exitInstruction(asmxtoyParser::InstructionContext *inst
         if (addressNode) {
           word << addressNode->getSymbol()->getText();
         } else {
-          std::string labelStr = argumentCtx->LABEL()->getSymbol()->getText();
+          std::string labelStr = argumentCtx->getStop()->getText();
 
           if (Labels.count(labelStr) == 0) {
             std::cerr << "Cannot reference undefined label" << std::endl;

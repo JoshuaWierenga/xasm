@@ -15,11 +15,11 @@ operation
     ;
 
 instruction: MNEMONIC argument*;
-argument: WS? (COMMA | WS) WS? (REGISTER | HALFWORD | LABEL);
+argument: WS? (COMMA | WS) WS? (REGISTER | HALFWORD | (MNEMONIC | LABEL));
 
 directive: DIRECTIVE WS WORD;
 
-label: LABEL COLON;
+label: (MNEMONIC | LABEL) COLON;
 
 MNEMONIC
     : 'hlt' // 0XXX
